@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POS Order Page</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f4f4f4;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 2fr 3fr;
+            grid-template-rows: auto 1fr auto;
+            gap: 10px;
+            width: 90%;
+            height: 90%;
+        }
+
+        /* 주문 내역 확인 화면 */
+        .order-summary {
+            grid-column: 1 / 2;
+            grid-row: 1 / 4;
+            border: 2px solid #000;
+            padding: 10px;
+            background-color: #ffffff;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .order-summary h2 {
+            margin-top: 0;
+            text-align: center;
+        }
+
+        /* 주문 목록 아이템 */
+        .order-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 5px 0;
+            padding: 5px;
+            border-bottom: 1px solid #ddd;
+            cursor: pointer;
+        }
+
+        .order-item .item-name {
+            font-size: 16px;
+        }
+
+        .order-item .item-quantity {
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+        }
+
+        .order-item .item-price {
+            font-size: 16px;
+        }
+
+        .order-item .item-time {
+            font-size: 12px;
+            color: gray;
+        }
+
+        /* +, - 버튼 */
+        .order-item button {
+            margin: 0 5px;
+            padding: 5px;
+            background-color: #ccc;
+            border: 1px solid #000;
+            cursor: pointer;
+        }
+
+        /* 총액 표시 */
+        .total-price {
+            font-size: 20px;
+            font-weight: bold;
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        /* 메뉴 선택 버튼 */
+        .menu-section {
+            grid-column: 2 / 3;
+            grid-row: 2 / 3;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+
+        .menu-section button {
+            padding: 20px;
+            background-color: #eee;
+            border: 1px solid #000;
+            cursor: pointer;
+        }
+
+        /* 기타 기능 버튼 */
+        .function-buttons {
+            grid-column: 2 / 3;
+            grid-row: 3 / 4;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr); /* 3개의 버튼 */
+            gap: 10px;
+        }
+
+        .function-buttons button {
+            padding: 20px;
+            background-color: #ddd;
+            border: 1px solid #000;
+            cursor: pointer;
+        }
+
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- 주문 내역 확인 화면 -->
+    <div class="order-summary">
+        <h2>주문 내역</h2>
+        <div id="order-items">
+            <!-- 주문한 항목들이 여기에 표시됩니다 -->
+        </div>
+        <!-- 총액을 표시할 영역 -->
+        <div class="total-price" id="total-price">총액: 0원</div>
+    </div>
+
+    <!-- 메뉴 섹션 -->
+    <div class="menu-section">
+        <button data-name="김치우동" data-price="10900">김치우동<br>10,900원</button>
+        <button data-name="고기국수" data-price="10900">고기국수<br>10,900원</button>
+        <button data-name="참치주먹밥" data-price="5500">참치주먹밥<br>5,500원</button>
+        <button data-name="떡볶이" data-price="8000">떡볶이<br>8,000원</button>
+        <button data-name="치즈추가" data-price="1000">치즈추가<br>1,000원</button>
+        <button data-name="나쵸" data-price="5500">나쵸<br>5,500원</button>
+        <button data-name="세트할인" data-price="-2000">세트할인<br>-2,000원</button>
+        <button data-name="유니폼할인" data-price="-1000">유니폼할인<br>-1,000원</button>
+    </div>
+
+    <!-- 기타 기능 버튼 -->
+    <div class="function-buttons">
+        <button>서비스</button>
+        <button id="cancel-button">취소</button> <!-- 취소 버튼 추가 -->
+        <button id="order-button">주문</button>
+    </div>
+</div>
+
+<script>
+    const orderItemsContainer = document.getElementById('order-items');
+    const totalPriceElement = document.getElementById('total-price');
+    let orderList = {};
+    const timeIntervals = {};
+
+    // 페이지 로드 시 기존에 저장된 주문 내역이 있으면 불러오기
+    window.onload = function() {
+        const tableNumber = new URLSearchParams(window.location.search).get('table');
+        const savedOrders = localStorage.getItem(`table-${tableNumber}`);
+        if (savedOrders) {
+            orderList = JSON.parse(savedOrders);
+            updateOrderSummary();
+        }
+    };
+
+    // 메뉴 버튼 클릭 이벤트 처리
+    document.querySelectorAll('.menu-section button').forEach(button => {
+        button.addEventListener('click', function() {
+            const itemName = this.getAttribute('data-name');
+            const itemPrice = parseInt(this.getAttribute('data-price'));
+
+            const orderTime = new Date(); // 주문 시간 저장
+
+            // 주문 항목이 이미 존재하는지 확인
+            if (orderList[itemName]) {
+                orderList[itemName].quantity += 1;
+                orderList[itemName].totalPrice += itemPrice;
+            } else {
+                orderList[itemName] = {
+                    price: itemPrice,
+                    quantity: 1,
+                    totalPrice: itemPrice,
+                    time: orderTime
+                };
+
+                // 주문 시간 경과를 표시하기 위한 타이머 시작
+                timeIntervals[itemName] = setInterval(() => {
+                    updateOrderSummary();
+                }, 1000);
+            }
+
+            updateOrderSummary();
+        });
+    });
+
+    // 경과 시간 계산 함수
+    function calculateElapsedTime(orderTime) {
+        const now = new Date();
+        const elapsedSeconds = Math.floor((now - new Date(orderTime)) / 1000);
+
+        const minutes = Math.floor(elapsedSeconds / 60);
+        const seconds = elapsedSeconds % 60;
+
+        return `${minutes}분 ${seconds}초`;
+    }
+
+    // 주문 내역 화면 및 총액 업데이트 함수
+    function updateOrderSummary() {
+        orderItemsContainer.innerHTML = ''; // 기존 항목 지우기
+        let totalPrice = 0; // 총액 초기화
+
+        Object.keys(orderList).forEach(itemName => {
+            const item = orderList[itemName];
+            totalPrice += item.totalPrice; // 총액 계산
+
+            const orderItem = document.createElement('div');
+            orderItem.classList.add('order-item');
+
+            const nameDiv = document.createElement('div');
+            nameDiv.classList.add('item-name');
+            nameDiv.textContent = itemName;
+
+            const quantityDiv = document.createElement('div');
+            quantityDiv.classList.add('item-quantity');
+
+            const minusButton = document.createElement('button');
+            minusButton.textContent = '-';
+            minusButton.addEventListener('click', () => {
+                if (item.quantity > 1) {
+                    item.quantity -= 1;
+                    item.totalPrice -= item.price;
+                } else {
+                    delete orderList[itemName];
+                    clearInterval(timeIntervals[itemName]); // 타이머 삭제
+                }
+                updateOrderSummary();
+            });
+
+            const plusButton = document.createElement('button');
+            plusButton.textContent = '+';
+            plusButton.addEventListener('click', () => {
+                item.quantity += 1;
+                item.totalPrice += item.price;
+                updateOrderSummary();
+            });
+
+            const quantityText = document.createElement('span');
+            quantityText.textContent = `${item.quantity}개`;
+
+            quantityDiv.appendChild(minusButton);
+            quantityDiv.appendChild(quantityText);
+            quantityDiv.appendChild(plusButton);
+
+            const priceDiv = document.createElement('div');
+            priceDiv.classList.add('item-price');
+            priceDiv.textContent = `${item.totalPrice.toLocaleString()}원`;
+
+            const timeDiv = document.createElement('div');
+            timeDiv.classList.add('item-time');
+            timeDiv.textContent = `주문 후 ${calculateElapsedTime(item.time)} 경과`;
+
+            orderItem.appendChild(nameDiv);
+            orderItem.appendChild(quantityDiv);
+            orderItem.appendChild(priceDiv);
+            orderItem.appendChild(timeDiv);
+
+            orderItemsContainer.appendChild(orderItem);
+        });
+
+        // 총액 업데이트
+        totalPriceElement.textContent = `총액: ${totalPrice.toLocaleString()}원`;
+    }
+
+    // 주문 버튼 클릭 이벤트 (주문 내역 저장 후 index.html로 이동)
+    document.getElementById('order-button').addEventListener('click', () => {
+        const tableNumber = new URLSearchParams(window.location.search).get('table');
+        // 주문 내역을 localStorage에 저장 (테이블별로 저장)
+        localStorage.setItem(`table-${tableNumber}`, JSON.stringify(orderList));
+
+        // 메인화면으로 이동 (index.html로 가정)
+        window.location.href = 'index.html';
+    });
+
+    // 취소 버튼 클릭 이벤트 (index.html로 이동)
+    document.getElementById('cancel-button').addEventListener('click', () => {
+        // 메인화면으로 이동
+        window.location.href = 'index.html';
+    });
+</script>
+
+</body>
+</html>
