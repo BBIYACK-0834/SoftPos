@@ -23,7 +23,7 @@ const reportFields = [
   ['assault', '구타 및 가혹행위'],
   ['verbal_abuse', '언어폭력'],
   ['sexual_misconduct', '성군기위반행위'],
-  ['suicide_risk', '자살징후자'],
+  ['suicide_risk', '자살징후'],
   ['complaints', '애로 및 건의사항'],
   ['patient', '환자'],
   ['next_day_work', '익일 처부일과'],
