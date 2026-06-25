@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { hasSupabaseConfig, supabase } from '@/lib/supabase';
 import { displayMember, emptyDailyReport, generateReportText, sortMembers, todayIso } from '@/lib/report';
 import {
@@ -69,6 +69,8 @@ export default function Home() {
   const [categoryForm, setCategoryForm] = useState(emptyCategoryForm);
   const [exceptionForm, setExceptionForm] = useState({ id: '', member_id: '', category: DEFAULT_EXCEPTION_CATEGORIES[0], customCategory: '', reason: '' });
   const [message, setMessage] = useState('');
+  const exceptionFormRef = useRef<HTMLDivElement>(null);
+  const exceptionListRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setIsAdmin(readAdminSession());
@@ -114,6 +116,12 @@ export default function Home() {
 
   function showError(error: unknown) {
     setMessage(error instanceof Error ? error.message : '요청을 처리하지 못했습니다.');
+  }
+
+  function scrollToSection(ref: React.RefObject<HTMLElement | null>) {
+    window.requestAnimationFrame(() => {
+      ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   }
 
   function loginAdmin() {
@@ -197,13 +205,29 @@ export default function Home() {
     if (!error) {
       setExceptionForm({ id: '', member_id: '', category: activeCategories[0] ?? DEFAULT_EXCEPTION_CATEGORIES[0], customCategory: '', reason: '' });
       await fetchExceptionsByDate(date);
+      scrollToSection(exceptionListRef);
     }
+  }
+
+
+  function editException(exception: DailyException) {
+    setExceptionForm({
+      id: exception.id,
+      member_id: exception.member_id,
+      category: activeCategories.includes(exception.category) ? exception.category : OTHER_EXCEPTION_CATEGORY,
+      customCategory: activeCategories.includes(exception.category) ? '' : exception.category,
+      reason: exception.reason ?? '',
+    });
+    scrollToSection(exceptionFormRef);
   }
 
   async function deleteException(id: string) {
     const { error } = await supabase.from('daily_exceptions').delete().eq('id', id);
     setMessage(error ? error.message : '열외 정보를 삭제했습니다.');
-    if (!error) await fetchExceptionsByDate(date);
+    if (!error) {
+      await fetchExceptionsByDate(date);
+      scrollToSection(exceptionListRef);
+    }
   }
 
   async function upsertDailyReport() {
@@ -264,7 +288,7 @@ export default function Home() {
 
       {tab === 'exceptions' && (
         <section className="grid">
-          <div className="card col-5">
+          <div className="card col-5" ref={exceptionFormRef}>
             <h2>열외 입력</h2>
             <p className="muted">휴대폰 화면에 맞춰 이름과 카테고리를 선택하고, 기타 선택 시 카테고리명을 직접 입력합니다.</p>
             <div className="stack">
@@ -277,9 +301,23 @@ export default function Home() {
               <div className="actions"><button disabled={!exceptionForm.member_id || (exceptionForm.category === OTHER_EXCEPTION_CATEGORY && !exceptionForm.customCategory.trim())} onClick={saveException}>{exceptionForm.id ? '수정 저장' : '저장'}</button><button className="secondary" onClick={() => setExceptionForm({ id: '', member_id: '', category: activeCategories[0] ?? DEFAULT_EXCEPTION_CATEGORIES[0], customCategory: '', reason: '' })}>초기화</button></div>
             </div>
           </div>
-          <div className="card col-7">
+          <div className="card col-7" ref={exceptionListRef}>
             <h2>{date} 열외 명단</h2>
-            <div className="list">{exceptions.map((exception) => <div className="row" key={exception.id}><div><b>{exception.members ? displayMember(exception.members) : exception.member_id}</b> · {exception.category}<p className="muted">{exception.reason || '사유 없음'}</p></div><div className="actions"><button className="secondary" onClick={() => setExceptionForm({ id: exception.id, member_id: exception.member_id, category: activeCategories.includes(exception.category) ? exception.category : OTHER_EXCEPTION_CATEGORY, customCategory: activeCategories.includes(exception.category) ? '' : exception.category, reason: exception.reason ?? '' })}>수정</button><button className="danger" onClick={() => deleteException(exception.id)}>삭제</button></div></div>)}</div>
+            <div className="exception-list">
+              {exceptions.map((exception) => (
+                <div className="exception-row" key={exception.id}>
+                  <div className="exception-main">
+                    <b>{exception.members ? displayMember(exception.members) : exception.member_id}</b>
+                    <span>{exception.category}</span>
+                    <p className="muted">{exception.reason || '사유 없음'}</p>
+                  </div>
+                  <div className="exception-actions">
+                    <button className="secondary compact" onClick={() => editException(exception)}>수정</button>
+                    <button className="danger compact" onClick={() => deleteException(exception.id)}>삭제</button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
       )}
