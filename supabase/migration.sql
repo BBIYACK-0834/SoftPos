@@ -41,7 +41,6 @@ create table if not exists daily_exceptions (
 
 alter table daily_exceptions drop constraint if exists daily_exceptions_category_check;
 
-
 create table if not exists vacation_schedules (
   id uuid primary key default gen_random_uuid(),
   member_id uuid not null references members(id) on delete cascade,

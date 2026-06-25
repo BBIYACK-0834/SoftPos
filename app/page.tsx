@@ -46,7 +46,6 @@ function readAdminSession() {
   }
 }
 
-
 function monthStartIso(month: string) {
   return `${month}-01`;
 }
@@ -121,7 +120,6 @@ export default function Home() {
     if (error) throw error;
     setExceptions((data ?? []) as DailyException[]);
   }
-
 
   async function fetchVacationSchedules(month: string) {
     if (!month) return setVacationSchedules([]);
@@ -245,7 +243,6 @@ export default function Home() {
     }
   }
 
-
   function editException(exception: DailyException) {
     setExceptionForm({
       id: exception.id,
@@ -265,7 +262,6 @@ export default function Home() {
       scrollToSection(exceptionListRef);
     }
   }
-
 
   async function saveVacationSchedule() {
     if (!vacationForm.member_id) return setMessage('휴가자를 선택해야 합니다.');
@@ -414,7 +410,6 @@ export default function Home() {
           </div>
         </section>
       )}
-
 
       {tab === 'vacation' && (
         <section className="grid">
