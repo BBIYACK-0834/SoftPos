@@ -41,6 +41,17 @@ create table if not exists daily_exceptions (
 
 alter table daily_exceptions drop constraint if exists daily_exceptions_category_check;
 
+
+create table if not exists vacation_schedules (
+  id uuid primary key default gen_random_uuid(),
+  member_id uuid not null references members(id) on delete cascade,
+  start_date date not null,
+  end_date date not null,
+  reason text,
+  created_at timestamp with time zone default now(),
+  check (start_date <= end_date)
+);
+
 create table if not exists daily_reports (
   id uuid primary key default gen_random_uuid(),
   date date not null unique,
@@ -57,6 +68,7 @@ create table if not exists daily_reports (
 alter table members enable row level security;
 alter table exception_categories enable row level security;
 alter table daily_exceptions enable row level security;
+alter table vacation_schedules enable row level security;
 alter table daily_reports enable row level security;
 
 drop policy if exists "authenticated members crud" on members;
@@ -64,14 +76,17 @@ drop policy if exists "public members crud" on members;
 drop policy if exists "public categories crud" on exception_categories;
 drop policy if exists "authenticated exceptions crud" on daily_exceptions;
 drop policy if exists "public exceptions crud" on daily_exceptions;
+drop policy if exists "public vacations crud" on vacation_schedules;
 drop policy if exists "authenticated reports crud" on daily_reports;
 drop policy if exists "public reports crud" on daily_reports;
 
 create policy "public members crud" on members for all to anon, authenticated using (true) with check (true);
 create policy "public categories crud" on exception_categories for all to anon, authenticated using (true) with check (true);
 create policy "public exceptions crud" on daily_exceptions for all to anon, authenticated using (true) with check (true);
+create policy "public vacations crud" on vacation_schedules for all to anon, authenticated using (true) with check (true);
 create policy "public reports crud" on daily_reports for all to anon, authenticated using (true) with check (true);
 
 create index if not exists members_sort_idx on members (active, rank, sort_order, name);
 create index if not exists exception_categories_sort_idx on exception_categories (active, sort_order, name);
 create index if not exists daily_exceptions_date_idx on daily_exceptions (date);
+create index if not exists vacation_schedules_month_idx on vacation_schedules (start_date, end_date);
