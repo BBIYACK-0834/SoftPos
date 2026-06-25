@@ -76,12 +76,12 @@ export function generateReportText(
       const membersInCategory = sortedItems
         .map((item) => exceptionMemberMap.get(item.member_id) ?? item.members)
         .filter((member): member is Member => Boolean(member));
-      exceptionLines.push(`- ${category}${membersInCategory.length} (${membersInCategory.map(displayMember).join(', ')})`);
+      exceptionLines.push(`- ${category} ${membersInCategory.length} (${membersInCategory.map(displayMember).join(', ')})`);
       for (const item of sortedItems) {
         const member = exceptionMemberMap.get(item.member_id) ?? item.members;
         if (!member) continue;
         const reason = item.reason?.trim() || category;
-        exceptionLines.push(`${displayMember(member)}(${reason})`);
+        exceptionLines.push(`${displayMember(member)} (${reason})`);
       }
       exceptionLines.push('');
     }
@@ -92,13 +92,14 @@ export function generateReportText(
   const unit = activeMembers[0]?.unit || DEFAULT_UNIT;
 
   return [
-    `지금 ${formatKoreanDate(date)} ${unit}`,
+    `${formatKoreanDate(date)} ${unit}`,
     '',
     `총원 : ${activeMembers.length}`,
     '',
     `열외 : ${exceptions.length}`,
     '',
     `현재원 : ${presentMembers.length}(${presentMembers.map(displayMember).join(', ')})`,
+    '',
     '열외내용 :',
     ...exceptionLines,
     '',

@@ -32,6 +32,14 @@ h2 { margin: 0 0 12px; font-size: 18px; }
 .tab { min-height: 40px; padding: 7px 5px; border-radius: 12px; background: #e2e8f0; color: #172033; font-size: 12px; }
 .tab.active { background: var(--brand); color: white; }
 .list { display: grid; gap: 10px; margin-top: 14px; }
+.exception-list { display: grid; gap: 8px; margin-top: 12px; }
+.exception-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 10px; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+.exception-main { min-width: 0; }
+.exception-main b { display: block; margin-bottom: 4px; font-size: 16px; }
+.exception-main span { display: inline-flex; align-items: center; min-height: 24px; padding: 3px 8px; border-radius: 999px; background: #eef4ff; color: #1d4ed8; font-size: 13px; font-weight: 800; }
+.exception-main p { margin: 6px 0 0; }
+.exception-actions { display: grid; gap: 6px; width: 58px; }
+.exception-actions .compact { min-height: 32px; padding: 6px 8px; border-radius: 10px; font-size: 13px; }
 .row { display: grid; gap: 10px; align-items: start; padding: 11px; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
 .muted { color: var(--muted); font-size: 14px; line-height: 1.5; }
 .report { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; line-height: 1.5; min-height: 260px; overflow-wrap: anywhere; font-size: 14px; }
