@@ -25,7 +25,8 @@ values
   ('휴가', 30),
   ('전투휴무', 40),
   ('외진', 50),
-  ('식청', 60)
+  ('식청', 60),
+  ('기타', 70)
 on conflict (name) do nothing;
 
 create table if not exists daily_exceptions (

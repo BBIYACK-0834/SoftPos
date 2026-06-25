@@ -8,6 +8,7 @@ import {
   ADMIN_PASSWORD,
   DEFAULT_EXCEPTION_CATEGORIES,
   DEFAULT_UNIT,
+  OTHER_EXCEPTION_CATEGORY,
   DailyException,
   DailyReport,
   ExceptionCategory,
@@ -30,6 +31,28 @@ const reportFields = [
 const emptyMemberForm = { id: '', name: '', rank: '상병', unit: DEFAULT_UNIT, active: true, sort_order: 0 };
 const emptyCategoryForm = { id: '', name: '', active: true, sort_order: 0 };
 
+const ADMIN_STORAGE_KEY = 'daily-report-admin';
+
+function readAdminSession() {
+  try {
+    return window.localStorage.getItem(ADMIN_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function writeAdminSession(isAdmin: boolean) {
+  try {
+    if (isAdmin) {
+      window.localStorage.setItem(ADMIN_STORAGE_KEY, 'true');
+    } else {
+      window.localStorage.removeItem(ADMIN_STORAGE_KEY);
+    }
+  } catch {
+    // In-app browsers can block localStorage. Keep the in-memory login state working.
+  }
+}
+
 export default function Home() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminId, setAdminId] = useState('');
@@ -42,11 +65,11 @@ export default function Home() {
   const [dailyReport, setDailyReport] = useState<DailyReport>(emptyDailyReport(todayIso()));
   const [memberForm, setMemberForm] = useState(emptyMemberForm);
   const [categoryForm, setCategoryForm] = useState(emptyCategoryForm);
-  const [exceptionForm, setExceptionForm] = useState({ id: '', member_id: '', category: DEFAULT_EXCEPTION_CATEGORIES[0], reason: '' });
+  const [exceptionForm, setExceptionForm] = useState({ id: '', member_id: '', category: DEFAULT_EXCEPTION_CATEGORIES[0], customCategory: '', reason: '' });
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    setIsAdmin(window.localStorage.getItem('daily-report-admin') === 'true');
+    setIsAdmin(readAdminSession());
     void refreshAll();
   }, []);
 
@@ -92,8 +115,8 @@ export default function Home() {
   }
 
   function loginAdmin() {
-    if (adminId === ADMIN_ID && adminPassword === ADMIN_PASSWORD) {
-      window.localStorage.setItem('daily-report-admin', 'true');
+    if (adminId.trim().toLowerCase() === ADMIN_ID && adminPassword === ADMIN_PASSWORD) {
+      writeAdminSession(true);
       setIsAdmin(true);
       setAdminPassword('');
       setMessage('관리자 모드로 전환했습니다.');
@@ -103,7 +126,7 @@ export default function Home() {
   }
 
   function logoutAdmin() {
-    window.localStorage.removeItem('daily-report-admin');
+    writeAdminSession(false);
     setIsAdmin(false);
     setTab('exceptions');
     setMessage('관리자 모드를 종료했습니다.');
@@ -136,12 +159,14 @@ export default function Home() {
   }
 
   async function saveException() {
-    const payload = { date, member_id: exceptionForm.member_id, category: exceptionForm.category, reason: exceptionForm.reason || null };
+    const selectedCategory = exceptionForm.category === OTHER_EXCEPTION_CATEGORY ? exceptionForm.customCategory.trim() : exceptionForm.category;
+    if (!selectedCategory) return setMessage('기타 카테고리를 선택한 경우 직접 입력값을 작성해야 합니다.');
+    const payload = { date, member_id: exceptionForm.member_id, category: selectedCategory, reason: exceptionForm.reason || null };
     const query = exceptionForm.id ? supabase.from('daily_exceptions').update(payload).eq('id', exceptionForm.id) : supabase.from('daily_exceptions').insert(payload);
     const { error } = await query;
     setMessage(error ? error.message : '열외 정보를 저장했습니다.');
     if (!error) {
-      setExceptionForm({ id: '', member_id: '', category: activeCategories[0] ?? DEFAULT_EXCEPTION_CATEGORIES[0], reason: '' });
+      setExceptionForm({ id: '', member_id: '', category: activeCategories[0] ?? DEFAULT_EXCEPTION_CATEGORIES[0], customCategory: '', reason: '' });
       await fetchExceptionsByDate(date);
     }
   }
@@ -166,7 +191,8 @@ export default function Home() {
   const activeMembers = useMemo(() => sortMembers(members.filter((member) => member.active)), [members]);
   const activeCategories = useMemo(() => {
     const list = categories.filter((category) => category.active).sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'ko')).map((category) => category.name);
-    return list.length > 0 ? list : DEFAULT_EXCEPTION_CATEGORIES;
+    const source = list.length > 0 ? list : DEFAULT_EXCEPTION_CATEGORIES;
+    return source.includes(OTHER_EXCEPTION_CATEGORY) ? source : [...source, OTHER_EXCEPTION_CATEGORY];
   }, [categories]);
   const reportText = useMemo(() => generateReportText(date, members, exceptions, dailyReport), [date, members, exceptions, dailyReport]);
 
@@ -182,8 +208,8 @@ export default function Home() {
             <div className="actions"><b>관리자 모드</b><button className="secondary" onClick={logoutAdmin}>관리자 종료</button></div>
           ) : (
             <div className="actions">
-              <input aria-label="관리자 아이디" placeholder="관리자 ID" value={adminId} onChange={(event) => setAdminId(event.target.value)} />
-              <input aria-label="관리자 비밀번호" placeholder="비밀번호" type="password" value={adminPassword} onChange={(event) => setAdminPassword(event.target.value)} />
+              <input aria-label="관리자 아이디" placeholder="관리자 ID" value={adminId} autoCapitalize="none" autoCorrect="off" autoComplete="username" inputMode="text" onChange={(event) => setAdminId(event.target.value)} />
+              <input aria-label="관리자 비밀번호" placeholder="비밀번호" type="password" value={adminPassword} autoCapitalize="none" autoCorrect="off" autoComplete="current-password" onChange={(event) => setAdminPassword(event.target.value)} />
               <button onClick={loginAdmin}>관리자 로그인</button>
             </div>
           )}
@@ -211,17 +237,20 @@ export default function Home() {
         <section className="grid">
           <div className="card col-5">
             <h2>열외 입력</h2>
-            <p className="muted">이름은 DB 명단에서 선택하고, 사유는 직접 입력합니다. 예: 이름 박스 선택 + 사유 “출타” 입력.</p>
+            <p className="muted">휴대폰 화면에 맞춰 이름과 카테고리를 선택하고, 기타 선택 시 카테고리명을 직접 입력합니다.</p>
             <div className="stack">
               <label>이름<select value={exceptionForm.member_id} onChange={(event) => setExceptionForm({ ...exceptionForm, member_id: event.target.value })}><option value="">인원 선택</option>{activeMembers.map((member) => <option key={member.id} value={member.id}>{displayMember(member)}</option>)}</select></label>
-              <label>카테고리<select value={exceptionForm.category} onChange={(event) => setExceptionForm({ ...exceptionForm, category: event.target.value })}>{activeCategories.map((category) => <option key={category} value={category}>{category}</option>)}</select></label>
+              <label>카테고리<select value={exceptionForm.category} onChange={(event) => setExceptionForm({ ...exceptionForm, category: event.target.value, customCategory: '' })}>{activeCategories.map((category) => <option key={category} value={category}>{category}</option>)}</select></label>
+              {exceptionForm.category === OTHER_EXCEPTION_CATEGORY && (
+                <label>기타 카테고리<input placeholder="예: 교육, 파견, 개인정비 등" value={exceptionForm.customCategory} onChange={(event) => setExceptionForm({ ...exceptionForm, customCategory: event.target.value })} /></label>
+              )}
               <label>사유<input placeholder="직접 입력 예: 출타, 병원 외진, 개인 휴가 등" value={exceptionForm.reason} onChange={(event) => setExceptionForm({ ...exceptionForm, reason: event.target.value })} /></label>
-              <div className="actions"><button disabled={!exceptionForm.member_id} onClick={saveException}>{exceptionForm.id ? '수정 저장' : '저장'}</button><button className="secondary" onClick={() => setExceptionForm({ id: '', member_id: '', category: activeCategories[0] ?? DEFAULT_EXCEPTION_CATEGORIES[0], reason: '' })}>초기화</button></div>
+              <div className="actions"><button disabled={!exceptionForm.member_id || (exceptionForm.category === OTHER_EXCEPTION_CATEGORY && !exceptionForm.customCategory.trim())} onClick={saveException}>{exceptionForm.id ? '수정 저장' : '저장'}</button><button className="secondary" onClick={() => setExceptionForm({ id: '', member_id: '', category: activeCategories[0] ?? DEFAULT_EXCEPTION_CATEGORIES[0], customCategory: '', reason: '' })}>초기화</button></div>
             </div>
           </div>
           <div className="card col-7">
             <h2>{date} 열외 명단</h2>
-            <div className="list">{exceptions.map((exception) => <div className="row" key={exception.id}><div><b>{exception.members ? displayMember(exception.members) : exception.member_id}</b> · {exception.category}<p className="muted">{exception.reason || '사유 없음'}</p></div><div className="actions"><button className="secondary" onClick={() => setExceptionForm({ id: exception.id, member_id: exception.member_id, category: exception.category, reason: exception.reason ?? '' })}>수정</button><button className="danger" onClick={() => deleteException(exception.id)}>삭제</button></div></div>)}</div>
+            <div className="list">{exceptions.map((exception) => <div className="row" key={exception.id}><div><b>{exception.members ? displayMember(exception.members) : exception.member_id}</b> · {exception.category}<p className="muted">{exception.reason || '사유 없음'}</p></div><div className="actions"><button className="secondary" onClick={() => setExceptionForm({ id: exception.id, member_id: exception.member_id, category: activeCategories.includes(exception.category) ? exception.category : OTHER_EXCEPTION_CATEGORY, customCategory: activeCategories.includes(exception.category) ? '' : exception.category, reason: exception.reason ?? '' })}>수정</button><button className="danger" onClick={() => deleteException(exception.id)}>삭제</button></div></div>)}</div>
           </div>
         </section>
       )}
