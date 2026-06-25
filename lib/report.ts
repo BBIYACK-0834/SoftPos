@@ -12,9 +12,9 @@ export function formatKoreanDate(date: string) {
 }
 
 function compareMembers(a: Member, b: Member) {
+  if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
   const rankDiff = RANKS.indexOf(a.rank) - RANKS.indexOf(b.rank);
   if (rankDiff !== 0) return rankDiff;
-  if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
   return a.name.localeCompare(b.name, 'ko');
 }
 
@@ -73,16 +73,11 @@ export function generateReportText(
         if (!memberA || !memberB) return 0;
         return compareMembers(memberA, memberB);
       });
-      const names = sortedItems
-        .map((item) => exceptionMemberMap.get(item.member_id) ?? item.members)
-        .filter(Boolean)
-        .map((member) => displayMember(member as Member))
-        .join(', ');
-      exceptionLines.push(`- ${category}${sortedItems.length} (${names})`);
       for (const item of sortedItems) {
-        const reason = item.reason?.trim();
         const member = exceptionMemberMap.get(item.member_id) ?? item.members;
-        if (reason && member) exceptionLines.push(`${displayMember(member)}: ${reason}`);
+        if (!member) continue;
+        const reason = item.reason?.trim() || category;
+        exceptionLines.push(`${displayMember(member)}(${reason})`);
       }
     }
   }
@@ -93,9 +88,7 @@ export function generateReportText(
   return [
     `지금 ${formatKoreanDate(date)} ${unit}`,
     '',
-    `총원 : ${activeMembers.length}`,
-    `열외 : ${exceptions.length}`,
-    `현재원 : ${presentMembers.length}(${presentMembers.map(displayMember).join(', ')})`,
+    `총원 / 열외 / 현재원 : ${activeMembers.length} / ${exceptions.length} / ${presentMembers.length}(${presentMembers.map(displayMember).join(', ')})`,
     '열외내용 :',
     ...exceptionLines,
     '',
