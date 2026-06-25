@@ -45,5 +45,5 @@ export const RANKS: Rank[] = ['병장', '상병', '일병', '이병'];
 export const OTHER_EXCEPTION_CATEGORY = '기타';
 export const DEFAULT_EXCEPTION_CATEGORIES = ['외출', '외박', '휴가', '전투휴무', '외진', '식청', OTHER_EXCEPTION_CATEGORY];
 export const DEFAULT_UNIT = '전투지원소대 수송분대';
-export const ADMIN_ID = 'tnthdrmsan';
-export const ADMIN_PASSWORD = '1q2w3e3r!';
+export const ADMIN_ID = 'tnthd';
+export const ADMIN_PASSWORD = '1q2w3e4r!';

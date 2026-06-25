@@ -13,6 +13,7 @@ import {
   DailyReport,
   ExceptionCategory,
   Member,
+  Rank,
   RANKS,
 } from '@/lib/types';
 
@@ -64,6 +65,7 @@ export default function Home() {
   const [exceptions, setExceptions] = useState<DailyException[]>([]);
   const [dailyReport, setDailyReport] = useState<DailyReport>(emptyDailyReport(todayIso()));
   const [memberForm, setMemberForm] = useState(emptyMemberForm);
+  const [showMemberForm, setShowMemberForm] = useState(false);
   const [categoryForm, setCategoryForm] = useState(emptyCategoryForm);
   const [exceptionForm, setExceptionForm] = useState({ id: '', member_id: '', category: DEFAULT_EXCEPTION_CATEGORIES[0], customCategory: '', reason: '' });
   const [message, setMessage] = useState('');
@@ -141,8 +143,35 @@ export default function Home() {
     setMessage(error ? error.message : '인원명부를 저장했습니다.');
     if (!error) {
       setMemberForm(emptyMemberForm);
+      setShowMemberForm(false);
       await fetchMembers();
     }
+  }
+
+  async function deleteMember(id: string) {
+    if (!isAdmin) return setMessage('관리자 모드에서만 인원명부를 수정할 수 있습니다.');
+    const { error } = await supabase.from('members').delete().eq('id', id);
+    setMessage(error ? error.message : '인원을 삭제했습니다.');
+    if (!error) {
+      if (memberForm.id === id) setMemberForm(emptyMemberForm);
+      await fetchMembers();
+    }
+  }
+
+  async function moveMember(member: Member, direction: -1 | 1) {
+    if (!isAdmin) return setMessage('관리자 모드에서만 인원명부를 수정할 수 있습니다.');
+    const orderedMembers = sortMembers(members);
+    const index = orderedMembers.findIndex((item) => item.id === member.id);
+    const target = orderedMembers[index + direction];
+    if (!target) return;
+
+    const reorderedMembers = [...orderedMembers];
+    [reorderedMembers[index], reorderedMembers[index + direction]] = [reorderedMembers[index + direction], reorderedMembers[index]];
+    const { error } = await supabase.from('members').upsert(
+      reorderedMembers.map((item, sortOrder) => ({ ...item, sort_order: sortOrder })),
+    );
+    setMessage(error ? error.message : '인원 우선순위를 변경했습니다.');
+    if (!error) await fetchMembers();
   }
 
   async function saveCategory() {
@@ -272,18 +301,42 @@ export default function Home() {
 
       {tab === 'admin' && (
         <section className="grid">
-          {!isAdmin && <p className="card col-12 warning">관리자 설정은 관리자 로그인 후 사용할 수 있습니다. 기본 관리자 ID는 tnthdrmsan입니다.</p>}
+          {!isAdmin && <p className="card col-12 warning">관리자 설정은 관리자 로그인 후 사용할 수 있습니다. 기본 관리자 ID는 tnthd입니다.</p>}
           <div className="card col-6 faded-when-disabled">
-            <h2>인원명부 관리</h2>
-            <div className="stack">
+            <div className="section-title">
+              <div>
+                <h2>인원명부 관리</h2>
+                <p className="muted">인원 추가 버튼으로 입력창을 열고, 목록에서 ↑↓로 우선순위를 바꾸거나 -로 삭제합니다.</p>
+              </div>
+              <button className="secondary compact" disabled={!isAdmin} onClick={() => { setMemberForm(emptyMemberForm); setShowMemberForm((value) => !value); }}>
+                {showMemberForm ? '닫기' : '인원 추가'}
+              </button>
+            </div>
+            {showMemberForm && <div className="stack add-panel">
               <label>이름<input disabled={!isAdmin} value={memberForm.name} onChange={(event) => setMemberForm({ ...memberForm, name: event.target.value })} /></label>
-              <label>계급<select disabled={!isAdmin} value={memberForm.rank} onChange={(event) => setMemberForm({ ...memberForm, rank: event.target.value })}>{RANKS.map((rank) => <option key={rank}>{rank}</option>)}</select></label>
+              <label>계급<select disabled={!isAdmin} value={memberForm.rank} onChange={(event) => setMemberForm({ ...memberForm, rank: event.target.value as Rank })}>{RANKS.map((rank) => <option key={rank}>{rank}</option>)}</select></label>
               <label>소속<input disabled={!isAdmin} value={memberForm.unit} onChange={(event) => setMemberForm({ ...memberForm, unit: event.target.value })} /></label>
               <label>정렬 순서<input disabled={!isAdmin} type="number" value={memberForm.sort_order} onChange={(event) => setMemberForm({ ...memberForm, sort_order: Number(event.target.value) })} /></label>
               <label><input disabled={!isAdmin} className="inline-check" type="checkbox" checked={memberForm.active} onChange={(event) => setMemberForm({ ...memberForm, active: event.target.checked })} /> 활성 인원</label>
               <div className="actions"><button disabled={!isAdmin || !memberForm.name} onClick={saveMember}>저장</button><button className="secondary" disabled={!isAdmin} onClick={() => setMemberForm(emptyMemberForm)}>초기화</button></div>
+            </div>}
+            <div className="member-table">
+              {sortMembers(members).map((member, index) => (
+                <div className={`member-row ${member.active ? '' : 'inactive'}`} key={member.id}>
+                  <div className="member-index">{index + 1}</div>
+                  <div className="member-main">
+                    <b>{displayMember(member)}</b>
+                    <p className="muted">{member.unit} · 순서 {member.sort_order} · {member.active ? '활성' : '비활성'}</p>
+                  </div>
+                  <div className="member-actions">
+                    <button className="icon-button secondary" disabled={!isAdmin || index === 0} onClick={() => moveMember(member, -1)} aria-label={`${displayMember(member)} 위로 이동`}>↑</button>
+                    <button className="icon-button secondary" disabled={!isAdmin || index === members.length - 1} onClick={() => moveMember(member, 1)} aria-label={`${displayMember(member)} 아래로 이동`}>↓</button>
+                    <button className="icon-button secondary" disabled={!isAdmin} onClick={() => { setMemberForm(member); setShowMemberForm(true); }} aria-label={`${displayMember(member)} 수정`}>✎</button>
+                    <button className="icon-button danger" disabled={!isAdmin} onClick={() => deleteMember(member.id)} aria-label={`${displayMember(member)} 삭제`}>-</button>
+                  </div>
+                </div>
+              ))}
             </div>
-            <div className="list">{members.map((member) => <div className="row" key={member.id}><div><b>{displayMember(member)}</b><p className="muted">{member.unit} · 순서 {member.sort_order} · {member.active ? '활성' : '비활성'}</p></div><button className="secondary" disabled={!isAdmin} onClick={() => setMemberForm(member)}>수정</button></div>)}</div>
           </div>
 
           <div className="card col-6 faded-when-disabled">

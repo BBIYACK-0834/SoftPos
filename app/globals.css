@@ -43,6 +43,17 @@ h2 { margin: 0 0 14px; font-size: 20px; }
 .stat-line { display: flex; align-items: center; font-weight: 700; }
 .inline-check { width: auto; min-height: auto; margin-right: 8px; }
 .faded-when-disabled button:disabled, .faded-when-disabled input:disabled, .faded-when-disabled select:disabled { opacity: .65; }
+.section-title { display: grid; gap: 12px; margin-bottom: 14px; }
+.section-title h2 { margin-bottom: 6px; }
+.compact { min-height: 42px; padding: 9px 12px; }
+.add-panel { margin-bottom: 16px; padding: 14px; border: 1px dashed var(--line); border-radius: 16px; background: #f8fafc; }
+.member-table { display: grid; gap: 8px; margin-top: 14px; }
+.member-row { display: grid; grid-template-columns: 34px 1fr; gap: 10px; align-items: center; padding: 12px; border: 1px solid var(--line); border-radius: 16px; background: #fff; }
+.member-row.inactive { background: #f8fafc; color: #64748b; }
+.member-index { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 999px; background: #e0ecff; color: #1d4ed8; font-weight: 800; }
+.member-main p { margin: 4px 0 0; }
+.member-actions { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.icon-button { min-height: 40px; border-radius: 12px; padding: 8px; font-size: 18px; line-height: 1; }
 
 @media (min-width: 640px) {
   .container { width: min(100%, 1180px); padding: 24px; }
@@ -56,4 +67,8 @@ h2 { margin: 0 0 14px; font-size: 20px; }
   .actions button { width: auto; }
   .admin-box { min-width: min(100%, 460px); }
   .admin-box input { min-width: 130px; width: auto; flex: 1; }
+  .section-title { grid-template-columns: 1fr auto; align-items: start; }
+  .member-row { grid-template-columns: 34px 1fr auto; }
+  .member-actions { grid-column: auto; display: flex; }
+  .icon-button { width: 40px; }
 }
