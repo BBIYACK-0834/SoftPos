@@ -76,7 +76,7 @@ export function generateReportText(
       const membersInCategory = sortedItems
         .map((item) => exceptionMemberMap.get(item.member_id) ?? item.members)
         .filter((member): member is Member => Boolean(member));
-      exceptionLines.push(`- ${category}${membersInCategory.length} (${membersInCategory.map(displayMember).join(', ')})`);
+      exceptionLines.push(`- ${category} ${membersInCategory.length} (${membersInCategory.map(displayMember).join(', ')})`);
       for (const item of sortedItems) {
         const member = exceptionMemberMap.get(item.member_id) ?? item.members;
         const reason = item.reason?.trim();
@@ -97,6 +97,7 @@ export function generateReportText(
     `총원 : ${activeMembers.length}`,
     `열외 : ${exceptions.length}`,
     `현재원 : ${presentMembers.length}(${presentMembers.map(displayMember).join(', ')})`,
+    '',
     '열외내용 :',
     ...exceptionLines,
     '',
