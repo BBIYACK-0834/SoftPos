@@ -258,19 +258,6 @@ export default function Home() {
     }
   }
 
-  function dateRange(startDate: string, endDate: string) {
-    const dates: string[] = [];
-    const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
-    const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
-    const current = new Date(Date.UTC(startYear, startMonth - 1, startDay));
-    const end = new Date(Date.UTC(endYear, endMonth - 1, endDay));
-    while (current <= end) {
-      dates.push(current.toISOString().slice(0, 10));
-      current.setUTCDate(current.getUTCDate() + 1);
-    }
-    return dates;
-  }
-
   function isRangeCategory(category: string) {
     return RANGE_EXCEPTION_CATEGORIES.includes(category);
   }
@@ -279,6 +266,13 @@ export default function Home() {
     const start = exception.start_date ?? exception.date;
     const end = exception.end_date ?? exception.date;
     return start === end ? start : `${start} ~ ${end}`;
+  }
+
+  function shiftIsoDate(value: string, amount: number) {
+    const [year, month, day] = value.split('-').map(Number);
+    const shifted = new Date(Date.UTC(year, month - 1, day));
+    shifted.setUTCDate(shifted.getUTCDate() + amount);
+    return shifted.toISOString().slice(0, 10);
   }
 
   async function refreshExceptionData() {
@@ -294,18 +288,38 @@ export default function Home() {
     const rangeMode = isRangeCategory(selectedCategory);
     const startDate = exceptionForm.start_date;
     const endDate = rangeMode ? exceptionForm.end_date : exceptionForm.start_date;
+    const { data: mergeTargets, error: mergeError } = await supabase
+      .from('daily_exceptions')
+      .select('id, start_date, end_date')
+      .eq('member_id', exceptionForm.member_id)
+      .eq('category', selectedCategory)
+      .lte('start_date', shiftIsoDate(endDate, 1))
+      .gte('end_date', shiftIsoDate(startDate, -1));
+
+    if (mergeError) return setMessage(mergeError.message);
+
+    const relatedExceptions = ((mergeTargets ?? []) as Pick<DailyException, 'id' | 'start_date' | 'end_date'>[])
+      .filter((item) => item.id !== exceptionForm.id);
+    const mergedStartDate = relatedExceptions.reduce((earliest, item) => item.start_date && item.start_date < earliest ? item.start_date : earliest, startDate);
+    const mergedEndDate = relatedExceptions.reduce((latest, item) => item.end_date && item.end_date > latest ? item.end_date : latest, endDate);
     const payload = {
-      date: startDate,
-      start_date: startDate,
-      end_date: endDate,
+      date: mergedStartDate,
+      start_date: mergedStartDate,
+      end_date: mergedEndDate,
       member_id: exceptionForm.member_id,
       category: selectedCategory,
       reason: exceptionForm.reason || null,
     };
 
+    const deleteIds = relatedExceptions.map((item) => item.id);
+    if (deleteIds.length > 0) {
+      const { error } = await supabase.from('daily_exceptions').delete().in('id', deleteIds);
+      if (error) return setMessage(error.message);
+    }
+
     if (exceptionForm.id) {
       const { error } = await supabase.from('daily_exceptions').update(payload).eq('id', exceptionForm.id);
-      setMessage(error ? error.message : '열외 정보를 수정했습니다.');
+      setMessage(error ? error.message : deleteIds.length > 0 ? '겹치는 열외를 기간 하나로 합쳐 수정했습니다.' : '열외 정보를 수정했습니다.');
       if (!error) {
         setExceptionForm({ ...emptyExceptionForm, start_date: date, end_date: date, category: activeCategories[0] ?? DEFAULT_EXCEPTION_CATEGORIES[0] });
         await refreshExceptionData();
@@ -315,7 +329,7 @@ export default function Home() {
     }
 
     const { error } = await supabase.from('daily_exceptions').insert(payload);
-    setMessage(error ? error.message : rangeMode ? '기간 열외 정보를 하나로 묶어 저장했습니다.' : '당일 열외 정보를 저장했습니다.');
+    setMessage(error ? error.message : (rangeMode || deleteIds.length > 0) ? '기간 열외 정보를 하나로 묶어 저장했습니다.' : '당일 열외 정보를 저장했습니다.');
     if (!error) {
       setExceptionForm({ ...emptyExceptionForm, start_date: date, end_date: date, category: activeCategories[0] ?? DEFAULT_EXCEPTION_CATEGORIES[0] });
       await refreshExceptionData();
