@@ -140,7 +140,7 @@ export default function Home() {
   }
 
   async function fetchExceptionList(selectedDate: string, scope: ExceptionListScope) {
-    let query = supabase.from('daily_exceptions').select('*, members(*)').order('date').order('created_at');
+    let query = supabase.from('daily_exceptions').select('*, members(*)').order('start_date').order('created_at');
     if (scope === 'day') {
       query = query.lte('start_date', selectedDate).gte('end_date', selectedDate);
     } else {
@@ -387,11 +387,6 @@ export default function Home() {
 
   return (
     <main className="container">
-      <header className="app-hero">
-        <h1>일일 인원현황 보고문 생성기</h1>
-        <p>깔끔하고 직관적인 5탭 구조의 프로토타입</p>
-      </header>
-
       {modal && (
         <div className="modal-backdrop" role="presentation" onClick={() => setModal(null)}>
           <section className="modal-card" role="dialog" aria-modal="true" aria-labelledby={`${modal}-modal-title`} onClick={(event) => event.stopPropagation()}>
@@ -447,7 +442,7 @@ export default function Home() {
 
       {tab === 'exceptions' && (
         <section className="grid">
-          <div className="card col-5" ref={exceptionFormRef}>
+          <div className="card col-12" ref={exceptionFormRef}>
             <h2>열외 입력</h2>
             <p className="muted">휴가를 포함한 모든 열외를 한 곳에서 입력합니다. 하루 또는 기간 단위로 저장할 수 있습니다.</p>
             <div className="stack">
@@ -468,46 +463,14 @@ export default function Home() {
               <div className="actions"><button disabled={!exceptionForm.member_id || (exceptionForm.category === OTHER_EXCEPTION_CATEGORY && !exceptionForm.customCategory.trim())} onClick={saveException}>{exceptionForm.id ? '수정 저장' : '저장'}</button><button className="secondary" onClick={() => setExceptionForm({ ...emptyExceptionForm, start_date: date, end_date: date, category: activeCategories[0] ?? DEFAULT_EXCEPTION_CATEGORIES[0] })}>초기화</button></div>
             </div>
           </div>
-          <div className="card col-7" ref={exceptionListRef}>
-            <div className="section-title compact-title">
-              <div>
-                <h2>{exceptionListScope === 'day' ? date : date.slice(0, 7)} 열외 명단</h2>
-                <p className="muted">날짜 범위와 카테고리 버튼으로 필요한 명단만 확인합니다.</p>
-              </div>
-            </div>
-            <div className="filter-buttons" aria-label="열외 명단 기간 필터">
-              <button className={exceptionListScope === 'day' ? 'active' : 'secondary'} onClick={() => setExceptionListScope('day')}>당일</button>
-              <button className={exceptionListScope === 'month' ? 'active' : 'secondary'} onClick={() => setExceptionListScope('month')}>달 단위</button>
-            </div>
-            <div className="filter-buttons category-filters" aria-label="열외 카테고리 필터">
-              {['전체', ...activeCategories].map((category) => (
-                <button key={category} className={exceptionCategoryFilter === category ? 'active' : 'secondary'} onClick={() => setExceptionCategoryFilter(category)}>{category}</button>
-              ))}
-            </div>
-            <div className="exception-list">
-              {filteredListedExceptions.length === 0 && <p className="muted">조건에 맞는 열외 명단이 없습니다.</p>}
-              {filteredListedExceptions.map((exception) => (
-                <div className="exception-row" key={exception.id}>
-                  <div className="exception-main">
-                    <b>{exception.members ? displayMember(exception.members) : exception.member_id}</b>
-                    <span>{exception.category}</span>
-                    <p className="muted">{formatExceptionPeriod(exception)}{exception.reason ? ` · ${exception.reason}` : ' · 사유 없음'}</p>
-                  </div>
-                  <div className="exception-actions">
-                    <button className="secondary compact" onClick={() => editException(exception)}>수정</button>
-                    <button className="danger compact" onClick={() => deleteException(exception.id)}>삭제</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         </section>
       )}
 
 
       {tab === 'manage' && (
         <section className="grid"><div className="card col-12" ref={exceptionListRef}>
-          <h2>열외 관리</h2><p className="muted">등록된 열외를 당일/월간과 카테고리별로 확인하고 수정합니다.</p>
+          <h2>열외 관리</h2><p className="muted">선택한 날짜 기준으로 등록된 열외를 당일/월간과 카테고리별로 확인하고 수정합니다.</p>
+          <label className="manage-date-picker">기준 날짜<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
           <div className="filter-buttons"><button className={exceptionListScope === 'day' ? 'active' : 'secondary'} onClick={() => setExceptionListScope('day')}>당일</button><button className={exceptionListScope === 'month' ? 'active' : 'secondary'} onClick={() => setExceptionListScope('month')}>월간</button></div>
           <div className="filter-buttons category-filters">{['전체', ...activeCategories].map((category) => <button key={category} className={exceptionCategoryFilter === category ? 'active' : 'secondary'} onClick={() => setExceptionCategoryFilter(category)}>{category}</button>)}</div>
           <div className="exception-list">{filteredListedExceptions.length === 0 && <p className="empty-state">더 이상 데이터가 없습니다.</p>}{filteredListedExceptions.map((exception) => <div className="exception-row" key={exception.id}><div className="exception-main"><b>{exception.members ? displayMember(exception.members) : exception.member_id}</b><span>{exception.category}</span><p className="muted">{formatExceptionPeriod(exception)}{exception.reason ? ` · ${exception.reason}` : ' · 사유 없음'}</p></div><div className="exception-actions"><button className="secondary compact" onClick={() => { editException(exception); setTab('exceptions'); }}>수정</button><button className="danger compact" onClick={() => deleteException(exception.id)}>삭제</button></div></div>)}</div>

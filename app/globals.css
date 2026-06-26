@@ -69,6 +69,7 @@
 .faded-when-disabled button:disabled,.faded-when-disabled input:disabled,.faded-when-disabled select:disabled{opacity:.65}
 .add-panel{margin-bottom:12px;padding:12px;border:1px dashed var(--line);border-radius:14px;background:#f8fafc}
 .category-filters{max-height:88px;overflow-y:auto;padding-bottom:2px}
+.manage-date-picker{display:block;margin:12px 0}
 
 @media (min-width:900px) {
 .container{width:min(100%,1500px);padding:28px 24px 32px}
