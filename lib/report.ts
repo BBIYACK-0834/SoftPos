@@ -79,9 +79,9 @@ export function generateReportText(
       exceptionLines.push(`- ${category} ${membersInCategory.length} (${membersInCategory.map(displayMember).join(', ')})`);
       for (const item of sortedItems) {
         const member = exceptionMemberMap.get(item.member_id) ?? item.members;
-        if (!member) continue;
-        const reason = item.reason?.trim() || category;
-        exceptionLines.push(`${displayMember(member)} (${reason})`);
+        const reason = item.reason?.trim();
+        if (!member || !reason) continue;
+        exceptionLines.push(`${displayMember(member)}: ${reason}`);
       }
       exceptionLines.push('');
     }
@@ -95,9 +95,7 @@ export function generateReportText(
     `${formatKoreanDate(date)} ${unit}`,
     '',
     `총원 : ${activeMembers.length}`,
-    '',
     `열외 : ${exceptions.length}`,
-    '',
     `현재원 : ${presentMembers.length}(${presentMembers.map(displayMember).join(', ')})`,
     '',
     '열외내용 :',
@@ -108,7 +106,7 @@ export function generateReportText(
     `- 구타 및 가혹행위 : ${valueOrNone(report.assault)}`,
     `- 언어폭력 : ${valueOrNone(report.verbal_abuse)}`,
     `- 성군기위반행위 : ${valueOrNone(report.sexual_misconduct)}`,
-    `- 자살징후 : ${valueOrNone(report.suicide_risk)}`,
+    `- 자살징후자 : ${valueOrNone(report.suicide_risk)}`,
     '',
     '2. 애로 및 건의사항',
     `  - ${valueOrNone(report.complaints)}`,
