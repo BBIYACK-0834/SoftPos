@@ -6,6 +6,12 @@ export function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+export function tomorrowIso() {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return tomorrow.toISOString().slice(0, 10);
+}
+
 export function formatKoreanDate(date: string) {
   const parsed = new Date(`${date}T00:00:00`);
   return `${parsed.getMonth() + 1}.${parsed.getDate()}(${WEEKDAYS[parsed.getDay()]})`;

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { hasSupabaseConfig, supabase } from '@/lib/supabase';
-import { displayMember, emptyDailyReport, generateReportText, sortMembers, todayIso } from '@/lib/report';
+import { displayMember, emptyDailyReport, generateReportText, sortMembers, tomorrowIso } from '@/lib/report';
 import {
   ADMIN_ID,
   ADMIN_PASSWORD,
@@ -44,7 +44,8 @@ const reportFields = [
 
 const emptyMemberForm = { id: '', name: '', rank: '상병', unit: DEFAULT_UNIT, active: true, sort_order: 0 };
 const emptyCategoryForm = { id: '', name: '', active: true, sort_order: 0 };
-const emptyExceptionForm = { id: '', member_id: '', category: DEFAULT_EXCEPTION_CATEGORIES[0], customCategory: '', start_date: todayIso(), end_date: todayIso(), reason: '' };
+const defaultReportDate = tomorrowIso();
+const emptyExceptionForm = { id: '', member_id: '', category: DEFAULT_EXCEPTION_CATEGORIES[0], customCategory: '', start_date: defaultReportDate, end_date: defaultReportDate, reason: '' };
 
 const ADMIN_STORAGE_KEY = 'daily-report-admin';
 
@@ -83,13 +84,13 @@ export default function Home() {
   const [adminPassword, setAdminPassword] = useState('');
   const [tab, setTab] = useState<Tab>('exceptions');
   const [modal, setModal] = useState<Modal>(null);
-  const [date, setDate] = useState(todayIso());
+  const [date, setDate] = useState(defaultReportDate);
   const [members, setMembers] = useState<Member[]>([]);
   const [categories, setCategories] = useState<ExceptionCategory[]>([]);
   const [exceptions, setExceptions] = useState<DailyException[]>([]);
   const [listedExceptions, setListedExceptions] = useState<DailyException[]>([]);
   const [dailyVacationSchedules, setDailyVacationSchedules] = useState<VacationSchedule[]>([]);
-  const [dailyReport, setDailyReport] = useState<DailyReport>(emptyDailyReport(todayIso()));
+  const [dailyReport, setDailyReport] = useState<DailyReport>(emptyDailyReport(defaultReportDate));
   const [memberForm, setMemberForm] = useState(emptyMemberForm);
   const [showMemberForm, setShowMemberForm] = useState(false);
   const [categoryForm, setCategoryForm] = useState(emptyCategoryForm);
@@ -423,7 +424,7 @@ export default function Home() {
               )
             ) : (
               <ol className="usage-list">
-                <li>상단에서 보고 날짜를 선택합니다.</li>
+                <li>상단 날짜는 기본적으로 다음날로 설정되며, 열외 관리의 기준 날짜를 변경하면 함께 변경됩니다.</li>
                 <li>열외 입력 탭에서 인원, 카테고리, 시작일, 종료일을 선택해 저장합니다.</li>
                 <li>하루 열외는 시작일과 종료일을 같은 날짜로 두고, 휴가·외박처럼 여러 날이면 기간으로 입력합니다.</li>
                 <li>휴가도 열외 인원에 포함되므로 카테고리에서 휴가를 선택해 함께 등록합니다.</li>
