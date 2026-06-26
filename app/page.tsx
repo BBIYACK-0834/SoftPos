@@ -19,7 +19,8 @@ import {
   VacationSchedule,
 } from '@/lib/types';
 
-type Tab = 'exceptions' | 'vacation' | 'daily' | 'report' | 'admin';
+type Tab = 'exceptions' | 'daily' | 'report' | 'admin';
+type ExceptionListScope = 'day' | 'month';
 type Modal = 'login' | 'usage' | null;
 
 const reportFields = [
@@ -34,7 +35,7 @@ const reportFields = [
 
 const emptyMemberForm = { id: '', name: '', rank: '상병', unit: DEFAULT_UNIT, active: true, sort_order: 0 };
 const emptyCategoryForm = { id: '', name: '', active: true, sort_order: 0 };
-const emptyVacationForm = { id: '', member_id: '', start_date: todayIso(), end_date: todayIso(), reason: '' };
+const emptyExceptionForm = { id: '', member_id: '', category: DEFAULT_EXCEPTION_CATEGORIES[0], customCategory: '', start_date: todayIso(), end_date: todayIso(), reason: '' };
 
 const ADMIN_STORAGE_KEY = 'daily-report-admin';
 
@@ -74,17 +75,18 @@ export default function Home() {
   const [tab, setTab] = useState<Tab>('exceptions');
   const [modal, setModal] = useState<Modal>(null);
   const [date, setDate] = useState(todayIso());
-  const [vacationMonth, setVacationMonth] = useState(todayIso().slice(0, 7));
   const [members, setMembers] = useState<Member[]>([]);
   const [categories, setCategories] = useState<ExceptionCategory[]>([]);
   const [exceptions, setExceptions] = useState<DailyException[]>([]);
-  const [vacationSchedules, setVacationSchedules] = useState<VacationSchedule[]>([]);
+  const [listedExceptions, setListedExceptions] = useState<DailyException[]>([]);
+  const [dailyVacationSchedules, setDailyVacationSchedules] = useState<VacationSchedule[]>([]);
   const [dailyReport, setDailyReport] = useState<DailyReport>(emptyDailyReport(todayIso()));
   const [memberForm, setMemberForm] = useState(emptyMemberForm);
   const [showMemberForm, setShowMemberForm] = useState(false);
   const [categoryForm, setCategoryForm] = useState(emptyCategoryForm);
-  const [exceptionForm, setExceptionForm] = useState({ id: '', member_id: '', category: DEFAULT_EXCEPTION_CATEGORIES[0], customCategory: '', reason: '' });
-  const [vacationForm, setVacationForm] = useState(emptyVacationForm);
+  const [exceptionForm, setExceptionForm] = useState(emptyExceptionForm);
+  const [exceptionListScope, setExceptionListScope] = useState<ExceptionListScope>('day');
+  const [exceptionCategoryFilter, setExceptionCategoryFilter] = useState('전체');
   const [message, setMessage] = useState('');
   const exceptionFormRef = useRef<HTMLDivElement>(null);
   const exceptionListRef = useRef<HTMLDivElement>(null);
@@ -95,12 +97,19 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    void Promise.all([fetchExceptionsByDate(date), fetchDailyReport(date)]).catch(showError);
+    setExceptionForm((form) => (form.id ? form : { ...form, start_date: date, end_date: date }));
+    void Promise.all([fetchExceptionsByDate(date), fetchExceptionList(date, exceptionListScope), fetchVacationSchedulesByDate(date), fetchDailyReport(date)]).catch(showError);
   }, [date]);
 
   useEffect(() => {
-    void fetchVacationSchedules(vacationMonth).catch(showError);
-  }, [vacationMonth]);
+    void fetchExceptionList(date, exceptionListScope).catch(showError);
+  }, [exceptionListScope]);
+
+  useEffect(() => {
+    if (!message) return;
+    const timer = window.setTimeout(() => setMessage(''), 3500);
+    return () => window.clearTimeout(timer);
+  }, [message]);
 
   async function fetchMembers() {
     const { data, error } = await supabase.from('members').select('*').order('sort_order').order('name');
@@ -121,16 +130,27 @@ export default function Home() {
     setExceptions((data ?? []) as DailyException[]);
   }
 
-  async function fetchVacationSchedules(month: string) {
-    if (!month) return setVacationSchedules([]);
+  async function fetchExceptionList(selectedDate: string, scope: ExceptionListScope) {
+    let query = supabase.from('daily_exceptions').select('*, members(*)').order('date').order('created_at');
+    if (scope === 'day') {
+      query = query.eq('date', selectedDate);
+    } else {
+      query = query.gte('date', monthStartIso(selectedDate.slice(0, 7))).lte('date', monthEndIso(selectedDate.slice(0, 7)));
+    }
+    const { data, error } = await query;
+    if (error) throw error;
+    setListedExceptions((data ?? []) as DailyException[]);
+  }
+
+  async function fetchVacationSchedulesByDate(selectedDate: string) {
     const { data, error } = await supabase
       .from('vacation_schedules')
       .select('*, members(*)')
-      .lte('start_date', monthEndIso(month))
-      .gte('end_date', monthStartIso(month))
+      .lte('start_date', selectedDate)
+      .gte('end_date', selectedDate)
       .order('start_date');
     if (error) throw error;
-    setVacationSchedules((data ?? []) as VacationSchedule[]);
+    setDailyVacationSchedules((data ?? []) as VacationSchedule[]);
   }
 
   async function fetchDailyReport(selectedDate: string) {
@@ -141,7 +161,7 @@ export default function Home() {
 
   async function refreshAll() {
     try {
-      await Promise.all([fetchMembers(), fetchCategories(), fetchExceptionsByDate(date), fetchDailyReport(date), fetchVacationSchedules(vacationMonth)]);
+      await Promise.all([fetchMembers(), fetchCategories(), fetchExceptionsByDate(date), fetchExceptionList(date, exceptionListScope), fetchVacationSchedulesByDate(date), fetchDailyReport(date)]);
     } catch (error) {
       showError(error);
     }
@@ -229,16 +249,57 @@ export default function Home() {
     }
   }
 
+  function dateRange(startDate: string, endDate: string) {
+    const dates: string[] = [];
+    const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
+    const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
+    const current = new Date(Date.UTC(startYear, startMonth - 1, startDay));
+    const end = new Date(Date.UTC(endYear, endMonth - 1, endDay));
+    while (current <= end) {
+      dates.push(current.toISOString().slice(0, 10));
+      current.setUTCDate(current.getUTCDate() + 1);
+    }
+    return dates;
+  }
+
+  async function refreshExceptionData() {
+    await Promise.all([fetchExceptionsByDate(date), fetchExceptionList(date, exceptionListScope), fetchVacationSchedulesByDate(date)]);
+  }
+
   async function saveException() {
     const selectedCategory = exceptionForm.category === OTHER_EXCEPTION_CATEGORY ? exceptionForm.customCategory.trim() : exceptionForm.category;
     if (!selectedCategory) return setMessage('기타 카테고리를 선택한 경우 직접 입력값을 작성해야 합니다.');
-    const payload = { date, member_id: exceptionForm.member_id, category: selectedCategory, reason: exceptionForm.reason || null };
-    const query = exceptionForm.id ? supabase.from('daily_exceptions').update(payload).eq('id', exceptionForm.id) : supabase.from('daily_exceptions').insert(payload);
-    const { error } = await query;
-    setMessage(error ? error.message : '열외 정보를 저장했습니다.');
+    if (!exceptionForm.member_id) return setMessage('열외 인원을 선택해야 합니다.');
+    if (exceptionForm.start_date > exceptionForm.end_date) return setMessage('시작일은 종료일보다 늦을 수 없습니다.');
+
+    if (exceptionForm.id) {
+      const payload = {
+        date: exceptionForm.start_date,
+        member_id: exceptionForm.member_id,
+        category: selectedCategory,
+        reason: exceptionForm.reason || null,
+      };
+      const { error } = await supabase.from('daily_exceptions').update(payload).eq('id', exceptionForm.id);
+      setMessage(error ? error.message : '열외 정보를 수정했습니다.');
+      if (!error) {
+        setExceptionForm({ ...emptyExceptionForm, start_date: date, end_date: date, category: activeCategories[0] ?? DEFAULT_EXCEPTION_CATEGORIES[0] });
+        await refreshExceptionData();
+        scrollToSection(exceptionListRef);
+      }
+      return;
+    }
+
+    const payloads = dateRange(exceptionForm.start_date, exceptionForm.end_date).map((entryDate) => ({
+      date: entryDate,
+      member_id: exceptionForm.member_id,
+      category: selectedCategory,
+      reason: exceptionForm.reason || null,
+    }));
+    const { error } = await supabase.from('daily_exceptions').upsert(payloads, { onConflict: 'date,member_id' });
+    setMessage(error ? error.message : `${payloads.length}일치 열외 정보를 저장했습니다.`);
     if (!error) {
-      setExceptionForm({ id: '', member_id: '', category: activeCategories[0] ?? DEFAULT_EXCEPTION_CATEGORIES[0], customCategory: '', reason: '' });
-      await fetchExceptionsByDate(date);
+      setExceptionForm({ ...emptyExceptionForm, start_date: date, end_date: date, category: activeCategories[0] ?? DEFAULT_EXCEPTION_CATEGORIES[0] });
+      await refreshExceptionData();
       scrollToSection(exceptionListRef);
     }
   }
@@ -249,6 +310,8 @@ export default function Home() {
       member_id: exception.member_id,
       category: activeCategories.includes(exception.category) ? exception.category : OTHER_EXCEPTION_CATEGORY,
       customCategory: activeCategories.includes(exception.category) ? '' : exception.category,
+      start_date: exception.date,
+      end_date: exception.date,
       reason: exception.reason ?? '',
     });
     scrollToSection(exceptionFormRef);
@@ -258,43 +321,9 @@ export default function Home() {
     const { error } = await supabase.from('daily_exceptions').delete().eq('id', id);
     setMessage(error ? error.message : '열외 정보를 삭제했습니다.');
     if (!error) {
-      await fetchExceptionsByDate(date);
+      await refreshExceptionData();
       scrollToSection(exceptionListRef);
     }
-  }
-
-  async function saveVacationSchedule() {
-    if (!vacationForm.member_id) return setMessage('휴가자를 선택해야 합니다.');
-    if (vacationForm.start_date > vacationForm.end_date) return setMessage('휴가 시작일은 종료일보다 늦을 수 없습니다.');
-    const payload = {
-      member_id: vacationForm.member_id,
-      start_date: vacationForm.start_date,
-      end_date: vacationForm.end_date,
-      reason: vacationForm.reason || null,
-    };
-    const query = vacationForm.id ? supabase.from('vacation_schedules').update(payload).eq('id', vacationForm.id) : supabase.from('vacation_schedules').insert(payload);
-    const { error } = await query;
-    setMessage(error ? error.message : '휴가 일정을 저장했습니다.');
-    if (!error) {
-      setVacationForm({ ...emptyVacationForm, start_date: vacationMonth + '-01', end_date: vacationMonth + '-01' });
-      await fetchVacationSchedules(vacationMonth);
-    }
-  }
-
-  function editVacationSchedule(schedule: VacationSchedule) {
-    setVacationForm({
-      id: schedule.id,
-      member_id: schedule.member_id,
-      start_date: schedule.start_date,
-      end_date: schedule.end_date,
-      reason: schedule.reason ?? '',
-    });
-  }
-
-  async function deleteVacationSchedule(id: string) {
-    const { error } = await supabase.from('vacation_schedules').delete().eq('id', id);
-    setMessage(error ? error.message : '휴가 일정을 삭제했습니다.');
-    if (!error) await fetchVacationSchedules(vacationMonth);
   }
 
   async function upsertDailyReport() {
@@ -315,7 +344,27 @@ export default function Home() {
     const withVacation = source.includes(VACATION_CATEGORY) ? source : [...source, VACATION_CATEGORY];
     return withVacation.includes(OTHER_EXCEPTION_CATEGORY) ? withVacation : [...withVacation, OTHER_EXCEPTION_CATEGORY];
   }, [categories]);
-  const reportText = useMemo(() => generateReportText(date, members, exceptions, dailyReport), [date, members, exceptions, dailyReport]);
+  const reportExceptions = useMemo(() => {
+    const manualExceptionMemberIds = new Set(exceptions.map((exception) => exception.member_id));
+    const activeMemberIds = new Set(activeMembers.map((member) => member.id));
+    const vacationExceptions: DailyException[] = dailyVacationSchedules
+      .filter((schedule) => activeMemberIds.has(schedule.member_id) && !manualExceptionMemberIds.has(schedule.member_id))
+      .map((schedule) => ({
+        id: `vacation-${schedule.id}`,
+        date,
+        member_id: schedule.member_id,
+        category: VACATION_CATEGORY,
+        reason: schedule.reason,
+        created_at: schedule.created_at,
+        members: schedule.members,
+      }));
+
+    return [...exceptions, ...vacationExceptions];
+  }, [date, exceptions, dailyVacationSchedules, activeMembers]);
+  const filteredListedExceptions = useMemo(() => {
+    return listedExceptions.filter((exception) => exceptionCategoryFilter === '전체' || exception.category === exceptionCategoryFilter);
+  }, [listedExceptions, exceptionCategoryFilter]);
+  const reportText = useMemo(() => generateReportText(date, members, reportExceptions, dailyReport), [date, members, reportExceptions, dailyReport]);
 
   return (
     <main className="container">
@@ -347,10 +396,11 @@ export default function Home() {
             ) : (
               <ol className="usage-list">
                 <li>상단에서 보고 날짜를 선택합니다.</li>
-                <li>열외 입력 탭에서 인원, 카테고리, 사유를 저장합니다.</li>
-                <li>휴가 탭에서 월별 휴가자를 확인하고 시작/종료일을 등록합니다.</li>
-                <li>일일 보고사항 탭에서 특이사항을 입력합니다.</li>
-                <li>보고문 생성 탭에서 내용을 확인하고 복사합니다.</li>
+                <li>열외 입력 탭에서 인원, 카테고리, 시작일, 종료일을 선택해 저장합니다.</li>
+                <li>하루 열외는 시작일과 종료일을 같은 날짜로 두고, 휴가·외박처럼 여러 날이면 기간으로 입력합니다.</li>
+                <li>휴가도 열외 인원에 포함되므로 카테고리에서 휴가를 선택해 함께 등록합니다.</li>
+                <li>일일 보고사항 탭에서 특이사항을 입력합니다. 비어 있는 항목은 보고문에서 없음으로 표시됩니다.</li>
+                <li>보고문 생성 탭에서 총원·열외·현재원과 열외내용을 확인한 뒤 복사합니다.</li>
                 <li>인원명부나 카테고리 수정은 관리자 로그인 후 관리자 설정에서 진행합니다.</li>
               </ol>
             )}
@@ -362,43 +412,62 @@ export default function Home() {
       <section className="card">
         <div className="grid">
           <label className="col-4">보고 날짜<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
-          <div className="col-8 muted stat-line">총원 {activeMembers.length}명 · 열외 {exceptions.length}명 · 현재원 {activeMembers.length - exceptions.length}명</div>
+          <div className="col-8 muted stat-line">총원 {activeMembers.length}명 · 열외 {reportExceptions.length}명 · 현재원 {activeMembers.length - reportExceptions.length}명</div>
         </div>
       </section>
 
       <nav className="tabs">
-        {(['exceptions', 'vacation', 'daily', 'report', 'admin'] as Tab[]).map((item) => (
+        {(['exceptions', 'daily', 'report', 'admin'] as Tab[]).map((item) => (
           <button key={item} className={`tab ${tab === item ? 'active' : ''}`} onClick={() => setTab(item)}>
-            {({ exceptions: '열외 입력', vacation: '휴가', daily: '일일 보고사항', report: '보고문 생성', admin: '관리자 설정' } as Record<Tab, string>)[item]}
+            {({ exceptions: '열외 입력', daily: '일일 보고사항', report: '보고문 생성', admin: '관리자 설정' } as Record<Tab, string>)[item]}
           </button>
         ))}
       </nav>
-      {message && <p className="card muted">{message}</p>}
+      {message && <div className="toast" role="status"><span>{message}</span><button className="toast-close" onClick={() => setMessage('')} aria-label="알림 닫기">×</button></div>}
 
       {tab === 'exceptions' && (
         <section className="grid">
           <div className="card col-5" ref={exceptionFormRef}>
             <h2>열외 입력</h2>
-            <p className="muted">휴대폰 화면에 맞춰 이름과 카테고리를 선택하고, 기타 선택 시 카테고리명을 직접 입력합니다.</p>
+            <p className="muted">휴가를 포함한 모든 열외를 한 곳에서 입력합니다. 하루 또는 기간 단위로 저장할 수 있습니다.</p>
             <div className="stack">
               <label>이름<select value={exceptionForm.member_id} onChange={(event) => setExceptionForm({ ...exceptionForm, member_id: event.target.value })}><option value="">인원 선택</option>{activeMembers.map((member) => <option key={member.id} value={member.id}>{displayMember(member)}</option>)}</select></label>
               <label>카테고리<select value={exceptionForm.category} onChange={(event) => setExceptionForm({ ...exceptionForm, category: event.target.value, customCategory: '' })}>{activeCategories.map((category) => <option key={category} value={category}>{category}</option>)}</select></label>
               {exceptionForm.category === OTHER_EXCEPTION_CATEGORY && (
                 <label>기타 카테고리<input placeholder="예: 교육, 파견, 개인정비 등" value={exceptionForm.customCategory} onChange={(event) => setExceptionForm({ ...exceptionForm, customCategory: event.target.value })} /></label>
               )}
-              <label>사유<input placeholder="직접 입력 예: 출타, 병원 외진, 개인 휴가 등" value={exceptionForm.reason} onChange={(event) => setExceptionForm({ ...exceptionForm, reason: event.target.value })} /></label>
-              <div className="actions"><button disabled={!exceptionForm.member_id || (exceptionForm.category === OTHER_EXCEPTION_CATEGORY && !exceptionForm.customCategory.trim())} onClick={saveException}>{exceptionForm.id ? '수정 저장' : '저장'}</button><button className="secondary" onClick={() => setExceptionForm({ id: '', member_id: '', category: activeCategories[0] ?? DEFAULT_EXCEPTION_CATEGORIES[0], customCategory: '', reason: '' })}>초기화</button></div>
+              <div className="date-range">
+                <label>시작일<input type="date" value={exceptionForm.start_date} onChange={(event) => setExceptionForm({ ...exceptionForm, start_date: event.target.value, end_date: exceptionForm.end_date < event.target.value ? event.target.value : exceptionForm.end_date })} /></label>
+                <label>종료일<input type="date" value={exceptionForm.end_date} onChange={(event) => setExceptionForm({ ...exceptionForm, end_date: event.target.value })} /></label>
+              </div>
+              <label>사유<input placeholder="직접 입력 예: 장기 외박, 병원 외진, 개인 휴가 등" value={exceptionForm.reason} onChange={(event) => setExceptionForm({ ...exceptionForm, reason: event.target.value })} /></label>
+              <div className="actions"><button disabled={!exceptionForm.member_id || (exceptionForm.category === OTHER_EXCEPTION_CATEGORY && !exceptionForm.customCategory.trim())} onClick={saveException}>{exceptionForm.id ? '수정 저장' : '저장'}</button><button className="secondary" onClick={() => setExceptionForm({ ...emptyExceptionForm, start_date: date, end_date: date, category: activeCategories[0] ?? DEFAULT_EXCEPTION_CATEGORIES[0] })}>초기화</button></div>
             </div>
           </div>
           <div className="card col-7" ref={exceptionListRef}>
-            <h2>{date} 열외 명단</h2>
+            <div className="section-title compact-title">
+              <div>
+                <h2>{exceptionListScope === 'day' ? date : date.slice(0, 7)} 열외 명단</h2>
+                <p className="muted">날짜 범위와 카테고리 버튼으로 필요한 명단만 확인합니다.</p>
+              </div>
+            </div>
+            <div className="filter-buttons" aria-label="열외 명단 기간 필터">
+              <button className={exceptionListScope === 'day' ? 'active' : 'secondary'} onClick={() => setExceptionListScope('day')}>당일</button>
+              <button className={exceptionListScope === 'month' ? 'active' : 'secondary'} onClick={() => setExceptionListScope('month')}>달 단위</button>
+            </div>
+            <div className="filter-buttons category-filters" aria-label="열외 카테고리 필터">
+              {['전체', ...activeCategories].map((category) => (
+                <button key={category} className={exceptionCategoryFilter === category ? 'active' : 'secondary'} onClick={() => setExceptionCategoryFilter(category)}>{category}</button>
+              ))}
+            </div>
             <div className="exception-list">
-              {exceptions.map((exception) => (
+              {filteredListedExceptions.length === 0 && <p className="muted">조건에 맞는 열외 명단이 없습니다.</p>}
+              {filteredListedExceptions.map((exception) => (
                 <div className="exception-row" key={exception.id}>
                   <div className="exception-main">
                     <b>{exception.members ? displayMember(exception.members) : exception.member_id}</b>
                     <span>{exception.category}</span>
-                    <p className="muted">{exception.reason || '사유 없음'}</p>
+                    <p className="muted">{exception.date}{exception.reason ? ` · ${exception.reason}` : ' · 사유 없음'}</p>
                   </div>
                   <div className="exception-actions">
                     <button className="secondary compact" onClick={() => editException(exception)}>수정</button>
@@ -411,42 +480,6 @@ export default function Home() {
         </section>
       )}
 
-      {tab === 'vacation' && (
-        <section className="grid">
-          <div className="card col-5">
-            <h2>휴가 일정 등록</h2>
-            <p className="muted">캘린더에서 휴가 시작일과 종료일을 선택해 월별 휴가자 명단을 정리합니다.</p>
-            <div className="stack">
-              <label>휴가자<select value={vacationForm.member_id} onChange={(event) => setVacationForm({ ...vacationForm, member_id: event.target.value })}><option value="">인원 선택</option>{activeMembers.map((member) => <option key={member.id} value={member.id}>{displayMember(member)}</option>)}</select></label>
-              <label>시작일<input type="date" value={vacationForm.start_date} onChange={(event) => setVacationForm({ ...vacationForm, start_date: event.target.value })} /></label>
-              <label>종료일<input type="date" value={vacationForm.end_date} onChange={(event) => setVacationForm({ ...vacationForm, end_date: event.target.value })} /></label>
-              <label>비고<input placeholder="예: 연가, 청원휴가 등" value={vacationForm.reason} onChange={(event) => setVacationForm({ ...vacationForm, reason: event.target.value })} /></label>
-              <div className="actions"><button disabled={!vacationForm.member_id} onClick={saveVacationSchedule}>{vacationForm.id ? '수정 저장' : '저장'}</button><button className="secondary" onClick={() => setVacationForm({ ...emptyVacationForm, start_date: vacationMonth + '-01', end_date: vacationMonth + '-01' })}>초기화</button></div>
-            </div>
-          </div>
-          <div className="card col-7">
-            <div className="section-title">
-              <div>
-                <h2>{vacationMonth} 휴가자</h2>
-                <p className="muted">선택한 월과 하루라도 겹치는 휴가 일정을 보여줍니다.</p>
-              </div>
-              <input className="month-input" type="month" value={vacationMonth} onChange={(event) => event.target.value && setVacationMonth(event.target.value)} />
-            </div>
-            <div className="list">
-              {vacationSchedules.length === 0 && <p className="muted">등록된 휴가 일정이 없습니다.</p>}
-              {vacationSchedules.map((schedule) => (
-                <div className="row" key={schedule.id}>
-                  <div>
-                    <b>{schedule.members ? displayMember(schedule.members) : schedule.member_id}</b>
-                    <p className="muted">{schedule.start_date} ~ {schedule.end_date}{schedule.reason ? ` · ${schedule.reason}` : ''}</p>
-                  </div>
-                  <div className="actions"><button className="secondary" onClick={() => editVacationSchedule(schedule)}>수정</button><button className="danger" onClick={() => deleteVacationSchedule(schedule.id)}>삭제</button></div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
 
       {tab === 'daily' && (
         <section className="card">
