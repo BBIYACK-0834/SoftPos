@@ -23,6 +23,7 @@ values
   ('외출', 10),
   ('외박', 20),
   ('휴가', 30),
+  ('파견', 35),
   ('전투휴무', 40),
   ('외진', 50),
   ('식청', 60),
@@ -32,12 +33,27 @@ on conflict (name) do nothing;
 create table if not exists daily_exceptions (
   id uuid primary key default gen_random_uuid(),
   date date not null,
+  start_date date not null default current_date,
+  end_date date not null default current_date,
   member_id uuid not null references members(id) on delete cascade,
   category text not null,
   reason text,
   created_at timestamp with time zone default now(),
-  unique(date, member_id)
+  unique(date, member_id),
+  check (start_date <= end_date)
 );
+
+alter table daily_exceptions add column if not exists start_date date;
+alter table daily_exceptions add column if not exists end_date date;
+update daily_exceptions set start_date = date where start_date is null;
+update daily_exceptions set end_date = date where end_date is null;
+alter table daily_exceptions alter column start_date set not null;
+alter table daily_exceptions alter column end_date set not null;
+alter table daily_exceptions drop constraint if exists daily_exceptions_start_before_end;
+alter table daily_exceptions add constraint daily_exceptions_start_before_end check (start_date <= end_date);
+alter table daily_exceptions drop constraint if exists daily_exceptions_date_member_id_key;
+create unique index if not exists daily_exceptions_member_range_idx on daily_exceptions (member_id, category, start_date, end_date);
+
 
 alter table daily_exceptions drop constraint if exists daily_exceptions_category_check;
 
@@ -88,4 +104,5 @@ create policy "public reports crud" on daily_reports for all to anon, authentica
 create index if not exists members_sort_idx on members (active, rank, sort_order, name);
 create index if not exists exception_categories_sort_idx on exception_categories (active, sort_order, name);
 create index if not exists daily_exceptions_date_idx on daily_exceptions (date);
+create index if not exists daily_exceptions_range_lookup_idx on daily_exceptions (start_date, end_date);
 create index if not exists vacation_schedules_month_idx on vacation_schedules (start_date, end_date);
